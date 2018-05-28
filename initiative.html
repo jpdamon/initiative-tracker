@@ -1,0 +1,211 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Initiative Tracker</title>
+        <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/foundicons/3.0.0/foundation-icons.min.css"/>
+        <link rel="stylesheet" href="style.css">
+    </head>
+    
+    <body>
+        <h1>Initiative Tracker</h1>
+        <div id = "addCharButton" class="button">Add Character</div>
+        <div id="sortButton" class="button">Sort</div>
+        <div id="nextButton" class="button">Next Turn</div>
+        
+        <!-- dangerous buttons, give some space to avoid misclicks -->
+        <br>
+        <div id="removeUnstarredButton" class="button danger">Remove Un-Starred</div>
+        <div id="resetButton" class="button danger">Remove All</div>
+        
+        <div id="characterContainer">
+            
+            <div class="characterBox">
+                <div class="initiativeScore">10</div>
+                <div class="characterInput">
+                    <input class="nameInput" type="text" name="name" placeholder="Character Name"><br>
+                    <label><small> = Bonus: </small><input class="numberInput bonusInput" type="number" name="bonus" value="0"></label>
+                    <label><small> + Roll: </small><input class="numberInput rollInput" type="number" name="rolled" value="10"></label>
+                    
+                    <div class="characterControls">
+                    <i class="fi-x size-32 removeButton" title="Remove Character"></i>
+                    <i class="fi-die-six size-32 rollButton" title="Roll Initiative"></i>
+                    <i class="fi-star size-32 starButton" title="Save Character"></i>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+        
+        <!--- javascript imports -->
+        <script
+          src="https://code.jquery.com/jquery-3.3.1.min.js"
+          integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+          crossorigin="anonymous"></script>        
+        <script>
+            var character_html = `
+            <div class="characterBox">
+                <div class="initiativeScore">10</div>
+                <div class="characterInput">
+                    <input class="nameInput" type="text" name="name" placeholder="Character Name"><br>
+                    <label><small> = Bonus: </small><input class="numberInput bonusInput" type="number" name="bonus" value="0"></label>
+                    <label><small> + Roll: </small><input class="numberInput rollInput" type="number" name="rolled" value="10"></label>
+                    
+                    <div class="characterControls">
+                    <i class="fi-x size-32 removeButton" title="Remove Character"></i>
+                    <i class="fi-die-six size-32 rollButton" title="Roll Initiative"></i>
+                    <i class="fi-star size-32 starButton" title="Save Character"></i>
+                    </div>
+                </div>
+            </div>`;
+            
+            function getRandomIntInclusive(min, max) {
+                min = Math.ceil(min);
+                max = Math.floor(max);
+                return Math.floor(Math.random() * (max - min + 1)) + min; //The maximum is inclusive and the minimum is inclusive 
+            }
+            
+            function rollD(sides) {
+                return getRandomIntInclusive(1, sides);
+            }
+
+            function recalcInitiative() {
+                $(".characterBox").each(function(){
+                        var roll = parseInt($(this).find("input[name=rolled]").val(), 10) || 0;
+                        var bonus = parseInt($(this).find("input[name=bonus]").val(), 10) || 0;
+                        $(this).find(".initiativeScore").text(roll + bonus);
+                    });
+            }
+            
+            function save(){
+                var characterStats = [];
+                $(".characterBox").each(function(){
+                    var character = {};
+                    character.name = $(this).find("input[name=name]").val();
+                    character.roll = parseInt($(this).find("input[name=rolled]").val(), 10) || 0;
+                    character.bonus = parseInt($(this).find("input[name=bonus]").val(), 10) || 0;
+                    characterStats.push(character);
+                });
+                
+                window.localStorage.setItem("characterStats", JSON.stringify(characterStats));
+            }
+            
+            function restore(){
+                    var characterStatsJson = window.localStorage.getItem("characterStats");
+                    if (!characterStatsJson) {
+                        return;
+                    }
+                    
+                    var characterStats = JSON.parse(characterStatsJson);
+                    
+                    // clear existing boxes
+                    $(".characterBox").remove();
+                    
+                    // add box for each saved & fill in details
+                    for (var i = 0; i < characterStats.length; i++) {
+                        var box  = $(character_html);
+                        $(box).appendTo("#characterContainer");
+                        $(box).find("input[name=name]").val(characterStats[i].name);
+                        $(box).find("input[name=rolled]").val(characterStats[i].roll);
+                        $(box).find("input[name=bonus]").val(characterStats[i].bonus);
+                    }
+                }
+            
+            
+            $(document).ready(function(){
+                
+                $("#addCharButton").click(function(){
+                    $("#characterContainer").append(character_html);
+                });
+                
+                $("#sortButton").click(function(){
+                    // re-order elements by initiative
+                    var container = $("#characterContainer");
+                    var children = container.children('div.characterBox');
+                    
+                    $(".characterBox").slideUp(400, function(){
+                        children.sort(function(a, b){
+                            var initiative_a = parseInt($(a).first(".initiativeScore").text());
+                            var initiative_b = parseInt($(b).first(".initiativeScore").text());
+                            return initiative_a < initiative_b;
+                        });
+                     
+                        $(container).append(children)
+                        $(".characterBox").slideDown()
+                    });
+                    
+                });
+                
+                $("#nextButton").click(function() {
+                    
+                    // find current active player, move to next sibling
+                    var active = $(".activeTurn").first();
+                    if (active.length === 0) {
+                        $(".characterBox").first().addClass("activeTurn");
+                        return;
+                    }
+                    
+                    active.removeClass("activeTurn");
+                    var next = active.next();
+                    if (next.length === 0) {
+                        // last sibling, go back to beginning!
+                        next = $(".characterBox").first();
+                    }
+                    
+                    next.addClass("activeTurn");
+                    
+                    
+                });
+                
+                $("#resetButton").click(function(){
+                     $(".characterBox").remove();
+                     window.localStorage.removeItem("characterStats");
+                });
+                
+                $("#removeUnstarredButton").click(function(){
+                    $(".characterBox").each(function(){
+                        // if this character does not have "starred" class, it can be removed
+                        if($(this).find(".starred").length === 0) {
+                            $(this).remove();
+                        }
+                    });
+                    
+                })
+                
+                $(document.body).on("click", ".removeButton", function(){
+                    // if this is the active player, make next character active before deleting
+                    var box = $(this).parents(".characterBox");
+                    if (box.hasClass("activeTurn")) {
+                        var next = box.next();
+                        if (next.length === 0) {
+                            // last sibling, go back to beginning!
+                            next = $(".characterBox").first();
+                        }
+                        
+                        next.addClass("activeTurn");
+                    }
+                    
+                    box.remove();
+                });
+                
+                $(document.body).on("click", ".rollButton", function(){
+                    var result = rollD(20);
+                    $(this).parents(".characterBox").find("input[name=rolled]").val(result);
+                    recalcInitiative()
+                })
+                
+                $(document.body).on("click", ".starButton", function(){
+                    $(this).toggleClass("starred")
+                });
+                
+                $("#characterContainer").on("change paste keyup", function(){
+                    recalcInitiative();
+                    save();
+                });
+                
+                // Restore previous session data
+                restore();
+                recalcInitiative();
+            });
+        </script>
+    </body>
+</html>
